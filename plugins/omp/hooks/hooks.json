@@ -1,0 +1,16 @@
+{
+  "description": "Block mutating OMP delegation while Claude is in plan mode.",
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "mcp__.*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/guard.cjs\""
+          }
+        ]
+      }
+    ]
+  }
+}

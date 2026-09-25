@@ -1,0 +1,31 @@
+# Dependencies and generated runtime
+node_modules/
+plugins/omp/runtime/
+plugins/omp/.runtime-stage-*/
+
+# Private verification/evidence and implementation planning
+verify/
+docs/implementation-plan.md
+
+# Local release output
+dist/
+*.tgz
+*.tgz.sha256
+
+# Local state, sessions, credentials, and transcripts
+.state/
+state/
+sessions/
+*.session
+*.transcript
+*.log
+.env
+.env.*
+*.pem
+*.key
+*.p12
+*.pfx
+*.crt
+
+# OS/editor noise
+.DS_Store

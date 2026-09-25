@@ -1,0 +1,8 @@
+{
+  "name": "omp",
+  "version": "0.1.0",
+  "description": "Delegate an approved implementation brief to the local OMP runner.",
+  "author": {
+    "name": "local"
+  }
+}

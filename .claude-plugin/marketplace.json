@@ -1,0 +1,15 @@
+{
+  "name": "local-omp-delegate",
+  "owner": {
+    "name": "local"
+  },
+  "metadata": {
+    "description": "A local Claude plugin that delegates approved briefs to OMP."
+  },
+  "plugins": [
+    {
+      "name": "omp",
+      "source": "./plugins/omp"
+    }
+  ]
+}

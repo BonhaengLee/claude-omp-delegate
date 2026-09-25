@@ -1,0 +1,52 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    name: Node ${{ matrix.node }} / ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        node: [20.x, 22.x]
+        os: [ubuntu-latest, macos-latest]
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+      - name: Install pinned dependencies
+        run: npm ci
+      - name: Audit production dependency closure
+        run: npm audit --omit=dev --audit-level=high
+      - name: Run typecheck and fixture tests
+        run: npm run verify
+      - name: Build and validate the self-contained release archive
+        run: npm run release:archive
+      - name: Inspect portable archive contents independently
+        run: |
+          python3 - <<'PY'
+          import pathlib, tarfile
+          archives = list(pathlib.Path("dist").glob("*-marketplace.tgz"))
+          assert len(archives) == 1, archives
+          with tarfile.open(archives[0], "r:gz") as archive:
+              names = [member.name for member in archive]
+          assert not any(part.startswith("._") for name in names for part in name.split("/")), "AppleDouble metadata leaked"
+          assert not any("verify/" in name or "docs/implementation-plan.md" in name for name in names), "Private artifact leaked"
+          for document in ("architecture.md", "verification.md"):
+              assert "claude-omp-delegate/docs/public/" + document in names, document
+          print(f"Portable archive verified: {len(names)} entries")
+          PY
