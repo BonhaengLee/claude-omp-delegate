@@ -6,17 +6,17 @@
   },
   "metadata": {
     "description": "Delegate approved implementation briefs from Claude Code to a local OMP (oh-my-pi) runner.",
-    "version": "0.1.2"
+    "version": "0.1.3"
   },
   "plugins": [
     {
       "name": "omp",
       "description": "Durable Claude-to-OMP delegation: /omp:implement, /omp:status, /omp:result, /omp:followup, /omp:cancel, /omp:doctor.",
-      "version": "0.1.2",
+      "version": "0.1.3",
       "source": {
         "source": "archive",
-        "url": "https://github.com/BonhaengLee/claude-omp-delegate/releases/download/v0.1.2/claude-omp-delegate-omp-0.1.2.zip",
-        "sha256": "4940294c2c938220f6817af14fc2ff9493902379eeff7809f3be0db5738cb129"
+        "url": "https://github.com/BonhaengLee/claude-omp-delegate/releases/download/v0.1.3/claude-omp-delegate-omp-0.1.3.zip",
+        "sha256": "ad64808bf1d01a3c964017bff6f0e76c9177d85794620e2a1f42a3ee4a16eb9d"
       }
     }
   ]

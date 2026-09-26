@@ -1,7 +1,7 @@
 // @ts-check
 /** Detached durable worker. The client process is never its owner. */
 import { runOmpProcess } from './runner.js';
-import { DelegateError, LIMITS, TERMINAL } from './contracts.js';
+import { DelegateError, LIMITS, TERMINAL, addUsage, emptyUsage } from './contracts.js';
 import { appendWorkerEvents, cancellationRequested, collectAfterEvidence, commitWorkerResult, initializeWorker, loadWorkerJob, sanitizeDelegateEvent, terminalizeWorkerFailure, readBaseline, readBrief, workerExecutable, writeWorkerResultArtifact, writeWorkerStderr, workerPatch } from './jobs.js';
 
 const EVENT_BATCH_MAX = 256;
@@ -89,6 +89,9 @@ export async function runWorker(jobDir) {
       void flushEventBatch().catch(() => {});
     }, EVENT_FLUSH_MS);
   };
+  let usageTotal = emptyUsage();
+  /** @type {string[]} */ let recent = [];
+  const startedAt = Date.now();
   const queueEvent = async (/** @type {any} */ event) => {
     if (backgroundFailure) throw new DelegateError(/** @type {any} */ (backgroundFailure.code), backgroundFailure.message);
     const persisted = sanitizeDelegateEvent(event);
@@ -102,6 +105,13 @@ export async function runWorker(jobDir) {
       const message = event.message ?? event;
       if (message.provider && message.model) patch.modelActual = String(message.provider) + '/' + String(message.model);
       patch.activity = event.type === 'message_start' ? 'assistant response started' : 'assistant output observed';
+      if (event.type === 'message_end' && event.message?.usage) { usageTotal = addUsage(usageTotal, event.message.usage); patch.usage = { ...usageTotal }; }
+    }
+    if (event.type === 'tool_execution_end') {
+      // Tool names and outcomes only: arguments and outputs can carry secrets and stay in the sanitized event log.
+      const entry = '+' + Math.round((Date.now() - startedAt) / 1000) + 's ' + String(event.toolName ?? 'tool').slice(0, 64) + ' ' + (event.isError === true ? 'error' : 'ok');
+      recent = [...recent, entry].slice(-LIMITS.recentActivity);
+      patch.recentActivity = recent;
     }
     eventPatch = { ...(eventPatch ?? {}), ...patch };
     if (eventBuffer.length >= EVENT_BATCH_MAX || eventBufferBytes >= EVENT_BATCH_BYTES) await flushEventBatch();

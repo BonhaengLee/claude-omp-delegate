@@ -8,7 +8,8 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { DelegateError } from '../src/contracts.js';
-import { doctor, followupJob, getJob, listJobs, requestCancel, startJob, waitForJob, writeWorkerResultArtifact, writeWorkerStderr, workerExecutable } from '../src/jobs.js';
+import { doctor, followupJob, getJob, jobDetails, listJobs, requestCancel, startJob, waitForJob, writeWorkerResultArtifact, writeWorkerStderr, workerExecutable } from '../src/jobs.js';
+import { renderResult, renderStatus } from '../src/render.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const FIXTURE = path.join(ROOT, 'tests', 'fixtures', 'job-omp.mjs');
@@ -243,6 +244,27 @@ test('cancel is linearized before completion, during a held child, and after ter
     assert.equal((await requestCancel({ workspace: value.workspace, jobId: terminal.id })).status, 'completed');
   } finally {
     if (previous === undefined) delete process.env.OMP_JOB_FIXTURE_READY_FILE; else process.env.OMP_JOB_FIXTURE_READY_FILE = previous;
+    await cleanup(value);
+  }
+});
+
+test('worker records OMP usage once per model response and a secret-free recent tool list', async () => {
+  const value = await setup();
+  try {
+    const started = await startJob({ workspace: value.workspace, brief: briefFor('tools') });
+    const done = await waitForJob({ workspace: value.workspace, jobId: started.id, timeoutMs: 30000 });
+    assert.equal(done.status, 'completed', JSON.stringify({ status: done.status, error: done.error }));
+    assert.deepEqual({ ...done.usage, cost: Math.round((done.usage?.cost ?? 0) * 1e6) / 1e6 }, { input: 300, output: 30, cacheRead: 2000, cacheWrite: 0, totalTokens: 2330, cost: 0.05, messages: 2 });
+    assert.deepEqual(done.recentActivity?.map((entry) => entry.replace(/^\+\d+s /, '')), ['bash ok', 'read error']);
+    assert.doesNotMatch(JSON.stringify(done.recentActivity), /SECRET_TOKEN|missing\.txt/);
+    const saved = process.env.OMP_DELEGATE_LANG; process.env.OMP_DELEGATE_LANG = 'en';
+    try {
+      const card = renderResult(done, await jobDetails(done));
+      assert.match(card.summary, /Tokens: 300 in \/ 30 out \/ 2k cache read · OMP cost estimate \$0\.05 \(2 model responses; estimate from OMP, not a bill\)/);
+      const status = await renderStatus([done]);
+      assert.match(status.summary, /OMP cost estimate across 1 listed job: \$0\.05/);
+    } finally { if (saved === undefined) delete process.env.OMP_DELEGATE_LANG; else process.env.OMP_DELEGATE_LANG = saved; }
+  } finally {
     await cleanup(value);
   }
 });

@@ -51,6 +51,29 @@ function elapsedLabel(value) {
   return messages().elapsed(value);
 }
 
+/** @param {number} value */
+function compactNumber(value) {
+  if (value >= 1_000_000) return (value / 1_000_000).toFixed(1).replace(/\.0$/, '') + 'M';
+  if (value >= 1_000) return (value / 1_000).toFixed(1).replace(/\.0$/, '') + 'k';
+  return String(Math.round(value));
+}
+/** @param {number} value */
+function money(value) {
+  return '$' + (value > 0 && value < 0.01 ? value.toFixed(4) : value.toFixed(2));
+}
+/** @param {Job} job @returns {string[]} */
+function usageLines(job) {
+  const usage = job.usage;
+  if (!usage || usage.messages === 0) return [];
+  const m = messages();
+  return [m.usage(m.tokenParts(compactNumber(usage.input), compactNumber(usage.output), compactNumber(usage.cacheRead)), money(usage.cost), usage.messages)];
+}
+/** @param {Job} job @param {number} [limit] @returns {string[]} */
+function recentLines(job, limit = 5) {
+  const recent = (job.recentActivity ?? []).slice(-limit);
+  return recent.length ? [messages().recent + recent.join(', ')] : [];
+}
+
 /** @param {Job} job @param {JobDetails|undefined} details */
 function safeJobData(job, details) {
   return {
@@ -64,6 +87,8 @@ function safeJobData(job, details) {
     ...(job.sessionId ? { sessionId: job.sessionId } : {}),
     ...(job.parentJobId ? { parentJobId: job.parentJobId } : {}),
     activity: job.activity ?? messages().noActivity,
+    ...(job.usage ? { usage: job.usage } : {}),
+    ...(job.recentActivity?.length ? { recentActivity: job.recentActivity } : {}),
     elapsedMs: elapsedMs(job),
     elapsed: elapsedLabel(elapsedMs(job)),
     createdAt: job.createdAt,
@@ -105,7 +130,7 @@ export function renderProgress(job, details) {
   const activity = job.activity ?? m.preparingWorker;
   const data = safeJobData(job, details);
   const nextActions = ['/omp:cancel ' + job.id, m.checkProgress];
-  const summary = card([details.brief.goal], [m.implementing + ' | ' + job.id.slice(0, 8), modelLabel + model, m.activity + activity, m.elapsedLabel + elapsedLabel(elapsedMs(job))], [m.runningNoEta], nextActions);
+  const summary = card([details.brief.goal], [m.implementing + ' | ' + job.id.slice(0, 8), modelLabel + model, m.activity + activity, ...recentLines(job), m.elapsedLabel + elapsedLabel(elapsedMs(job)), ...usageLines(job)], [m.runningNoEta], nextActions);
   return envelope({ status: job.status, jobId: job.id, summary, nextActions, warnings: job.warnings, data });
 }
 
@@ -127,6 +152,7 @@ export function renderResult(job, details) {
   const verificationLines = [];
   if (typeof run.exitCode === 'number' || run.exitCode === null) verificationLines.push(m.exitCode + asText(run.exitCode));
   if (typeof job.modelActual === 'string') verificationLines.push(m.modelActual + job.modelActual);
+  verificationLines.push(...usageLines(job));
   if (verification) verificationLines.push(m.toolResults(verification));
   else verificationLines.push(m.noVerification);
   if (evidence.after && typeof evidence.after === 'object') verificationLines.push(m.evidenceSaved);
@@ -178,7 +204,10 @@ export async function renderStatus(jobs, options = {}) {
   const nextActions = active.length ? active.map((item) => '/omp:cancel ' + item.id) : [m.reviewLatest(cards[0].id)];
   const summary = card(
     cards.map((item) => '[' + item.status + '] ' + item.goal),
-    cards.map((item) => item.id.slice(0, 8) + ' | ' + (item.modelActual ? m.modelActual : m.modelRequested) + item.model + ' | ' + m.activity + item.activity + ' | ' + m.elapsedLabel + item.elapsed),
+    [
+      ...cards.map((item) => item.id.slice(0, 8) + ' | ' + (item.modelActual ? m.modelActual : m.modelRequested) + item.model + ' | ' + m.activity + item.activity + ' | ' + m.elapsedLabel + item.elapsed + (item.usage?.messages ? ' | ' + money(item.usage.cost) : '') + (!TERMINAL_SET.has(item.status) && item.recentActivity?.length ? ' | ' + m.recent + item.recentActivity.slice(-3).join(', ') : '')),
+      ...(cards.some((item) => item.usage?.messages) ? [m.listedCost(money(cards.reduce((sum, item) => sum + (item.usage?.cost ?? 0), 0)), cards.length)] : []),
+    ],
     active.length ? [m.dontEditWhileRunning] : [m.terminalNotAcceptance],
     nextActions,
   );

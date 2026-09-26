@@ -35,4 +35,22 @@ else if (mode === 'burst') {
   emit({ type: 'agent_end', isTerminal: true });
   await finish(0);
 }
+else if (mode === 'tools') {
+  // Two model responses with usage, one repeated by turn_end (must not be double counted), and two tool runs.
+  const usage = (input, output, cost) => ({ input, output, cacheRead: 1000, cacheWrite: 0, totalTokens: input + output + 1000, cost: { input: cost / 2, output: cost / 2, cacheRead: 0, cacheWrite: 0, total: cost } });
+  const first = { role: 'assistant', content: [{ type: 'toolCall', id: 't1', name: 'bash' }], provider: 'openai-codex', model: 'job-fixture', stopReason: 'toolUse', usage: usage(100, 10, 0.02) };
+  emit({ type: 'message_end', message: first });
+  emit({ type: 'turn_end', message: first });
+  emit({ type: 'tool_execution_start', toolCallId: 't1', toolName: 'bash', args: { command: 'SECRET_TOKEN=abc npm test' } });
+  emit({ type: 'tool_execution_end', toolCallId: 't1', toolName: 'bash', isError: false, result: { content: [] } });
+  emit({ type: 'tool_execution_start', toolCallId: 't2', toolName: 'read', args: { path: 'missing.txt' } });
+  emit({ type: 'tool_execution_end', toolCallId: 't2', toolName: 'read', isError: true, result: { content: [] } });
+  const text = 'TOOLS_OK:' + id;
+  const last = { role: 'assistant', content: [{ type: 'text', text }], provider: 'openai-codex', model: 'job-fixture', stopReason: 'stop', usage: usage(200, 20, 0.03) };
+  emit({ type: 'message_end', message: last });
+  emit({ type: 'turn_end', message: last });
+  await persistNative({ type: 'message', message: last });
+  emit({ type: 'agent_end', isTerminal: true });
+  await finish(0);
+}
 else { const text = resumedId ? 'RESUME_OK:' + id + ':' + decision : 'FIXTURE_OK:' + id + ':' + decision; emit({ type: 'message_end', message: { role: 'assistant', content: [{ type: 'text', text }], provider: 'openai-codex', model: 'job-fixture', stopReason: 'stop' } }); emit({ type: 'agent_end', isTerminal: true }); await finish(0); }

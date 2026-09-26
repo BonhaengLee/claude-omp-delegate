@@ -3,7 +3,7 @@
  * Real-host end-to-end check: packaged runtime + a real OMP executable + real model call, in an isolated
  * state directory and a throwaway git workspace. It never touches the shared plugin state or your repos.
  *
- * Usage: npm run package && node scripts/host-e2e.mjs [--omp /absolute/path/to/omp]
+ * Usage: npm run package && node scripts/host-e2e.mjs [--omp /absolute/path/to/omp] [--keep]
  * Requires an authenticated OMP whose default model resolves to openai-codex/<id>. Spends one small model run.
  * Prints one JSON line; exit 0 only when every check passed.
  */
@@ -61,11 +61,15 @@ try {
   report.changed = changed;
   report.checks.writeScopeOnly = JSON.stringify(changed) === JSON.stringify(['add.js', 'add.test.mjs']);
   report.checks.readmeUntouched = readFileSync(path.join(workspace, 'README.md'), 'utf8') === '# e2e\n';
-  report.checks.recordedVersion = JSON.parse(readFileSync(execFileSync('find', [state, '-name', 'job.json'], { encoding: 'utf8' }).trim().split('\n')[0], 'utf8')).ompVersion === report.ompVersion;
+  const recorded = JSON.parse(readFileSync(execFileSync('find', [state, '-name', 'job.json'], { encoding: 'utf8' }).trim().split('\n')[0], 'utf8'));
+  report.checks.recordedVersion = recorded.ompVersion === report.ompVersion;
+  report.usage = recorded.usage; report.recentActivity = recorded.recentActivity;
+  report.checks.usageRecorded = recorded.usage?.messages >= 1 && recorded.usage?.totalTokens > 0 && Number.isFinite(recorded.usage?.cost);
+  report.checks.toolActivityRecorded = Array.isArray(recorded.recentActivity) && recorded.recentActivity.length >= 1;
 } catch (error) {
   report.error = error instanceof Error ? error.message : String(error);
 }
-report.passed = !report.error && Object.values(report.checks).length === 8 && Object.values(report.checks).every(Boolean);
+report.passed = !report.error && Object.values(report.checks).length === 10 && Object.values(report.checks).every(Boolean);
 console.log(JSON.stringify(report));
-if (report.passed) rmSync(base, { recursive: true, force: true }); else console.error('kept for inspection: ' + base);
+if (report.passed && !process.argv.includes('--keep')) rmSync(base, { recursive: true, force: true }); else console.error('kept for inspection: ' + base);
 process.exitCode = report.passed ? 0 : 1;

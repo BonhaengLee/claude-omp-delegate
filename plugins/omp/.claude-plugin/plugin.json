@@ -1,6 +1,6 @@
 {
   "name": "omp",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "Delegate approved implementation briefs from Claude Code to a local OMP (oh-my-pi) coding agent, with durable jobs, resume, cancel, and evidence cards.",
   "author": {
     "name": "BonhaengLee",

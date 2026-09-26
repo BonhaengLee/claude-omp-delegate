@@ -118,3 +118,7 @@ Release-archive privacy: tar headers are written with an empty owner, uid/gid 0,
 ## Recorded checks for 0.1.2 (2026-09-26)
 
 0.1.2 moves card text into `src/messages.js` (English default, Korean via `OMP_DELEGATE_LANG=ko` or a Korean locale), translates the command prompts to English, and removes launcher notes that only applied to the maintainer's own setup. Runtime protocol handling is unchanged. `OMP_DELEGATE_LANG=en node scripts/host-e2e.mjs --omp <OMP 18.3.2>` passed all eight checks (doctor, start, completion, result, independent `node add.test.mjs`, write-scope-only changes, README untouched, recorded OMP version) on macOS arm64, Node.js 24.13.0. The README example card is rendered from a real 18.3.2 job by the new English renderer.
+
+## Recorded checks for 0.1.3 (2026-09-26)
+
+0.1.3 records OMP-reported token usage and cost estimate per job (counted from assistant `message_end` events only; `turn_end`/`agent_end` repeat the same numbers) and a ring of the last eight tool names with ok/error outcomes (arguments and output are not copied). `node scripts/host-e2e.mjs` gained two checks, `usageRecorded` and `toolActivityRecorded`; against OMP 18.3.2 all ten checks passed on macOS arm64 / Node.js 24.13.0. Sample: 5 model responses, 117,034 tokens, OMP cost estimate $0.155, tools `eval ok, write ok, write ok, eval ok`. The README example card is that run rendered by the English renderer. `tests/readme-guarantees.test.js` fails if a test cited in the README guarantees table is renamed or removed.

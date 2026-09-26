@@ -33,7 +33,7 @@ export function classifyOmpVersion(version, allowUnsupported = false) {
   if (OMP_COMPAT.tested.includes(version)) return { status: 'tested', accepted: true };
   return { status: 'untested', accepted: true, warning: 'OMP ' + version + ' is inside the supported range but has no recorded host verification (tested: ' + OMP_COMPAT.tested.join(', ') + ').' };
 }
-export const LIMITS = Object.freeze({ lineBytes: 16 * 1024 * 1024, stderrBytes: 64 * 1024, previewBytes: 2048, startupMs: 120000, termMs: 5000, killMs: 5000, readyMs: 5000, heartbeatMs: 2000, staleMs: 30000, cancelPollMs: 250 });
+export const LIMITS = Object.freeze({ lineBytes: 16 * 1024 * 1024, stderrBytes: 64 * 1024, previewBytes: 2048, startupMs: 120000, recentActivity: 8, termMs: 5000, killMs: 5000, readyMs: 5000, heartbeatMs: 2000, staleMs: 30000, cancelPollMs: 250 });
 export const THINKING = /** @type {const} */ (['off','minimal','low','medium','high','xhigh','max','auto']);
 export const STATUSES = /** @type {const} */ (['starting','running','cancelling','completed','failed','cancelled','interrupted']);
 export const TERMINAL = new Set(['completed','failed','cancelled','interrupted']);
@@ -55,7 +55,7 @@ export const toolSchemas = {
 /** @typedef {typeof STATUSES[number]} JobStatus */
 /** @typedef {typeof ERROR_CODES[number]} ErrorCode */
 /** @typedef {{code: ErrorCode, message: string}} JobError */
-/** @typedef {{version:1,id:string,workspace:string,lockKey:string,status:JobStatus,createdAt:string,updatedAt:string,sessionId?:string,sessionDir:string,sessionFile?:string,ompVersion?:string,executable:string,modelRequested:string,modelActual?:string,thinking?:string,parentJobId?:string,workerNonce:string,ownerPid?:number,childPgid?:number,heartbeatAt?:string,result?:Record<string,unknown>,error?:JobError,warnings:string[],activity?:string}} Job */
+/** @typedef {{version:1,id:string,workspace:string,lockKey:string,status:JobStatus,createdAt:string,updatedAt:string,sessionId?:string,sessionDir:string,sessionFile?:string,ompVersion?:string,executable:string,modelRequested:string,modelActual?:string,thinking?:string,parentJobId?:string,workerNonce:string,ownerPid?:number,childPgid?:number,heartbeatAt?:string,result?:Record<string,unknown>,error?:JobError,warnings:string[],activity?:string,usage?:Usage,recentActivity?:string[]}} Job */
 export class DelegateError extends Error {
  /** @param {ErrorCode} code @param {string} message @param {unknown} [details] */
  constructor(code,message,details){super(message);this.name='DelegateError';this.code=code;this.details=details;}
@@ -93,8 +93,24 @@ export function parseBriefOptions(brief){
  }catch(error){if(error instanceof DelegateError)throw error;throw new DelegateError('INVALID_INPUT',String(error));}
 }
 
+/** @typedef {{input:number,output:number,cacheRead:number,cacheWrite:number,totalTokens:number,cost:number,messages:number}} Usage */
+const counter = z.number().finite().nonnegative();
+export const usageSchema = z.object({ input: counter, output: counter, cacheRead: counter, cacheWrite: counter, totalTokens: counter, cost: counter, messages: z.number().int().nonnegative() }).strict();
+/** @returns {Usage} */
+export function emptyUsage() { return { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, totalTokens: 0, cost: 0, messages: 0 }; }
+/**
+ * Add one assistant message's OMP-reported usage. Only message_end is counted: turn_end and agent_end repeat the
+ * same numbers. Non-finite or negative values are ignored instead of corrupting the total.
+ * @param {Usage} total @param {any} usage @returns {Usage}
+ */
+export function addUsage(total, usage) {
+  if (!usage || typeof usage !== 'object') return total;
+  const num = (/** @type {unknown} */ value) => (typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : 0);
+  const cost = usage.cost && typeof usage.cost === 'object' ? num(usage.cost.total) : num(usage.cost);
+  return { input: total.input + num(usage.input), output: total.output + num(usage.output), cacheRead: total.cacheRead + num(usage.cacheRead), cacheWrite: total.cacheWrite + num(usage.cacheWrite), totalTokens: total.totalTokens + num(usage.totalTokens), cost: total.cost + cost, messages: total.messages + 1 };
+}
 export const jobSchema = z.object({
- version:z.literal(1),id:jobIdSchema,workspace:workspaceSchema,lockKey:workspaceSchema,status:z.enum(STATUSES),createdAt:z.string().datetime(),updatedAt:z.string().datetime(),sessionId:z.string().min(1).optional(),sessionDir:workspaceSchema,sessionFile:workspaceSchema.optional(),ompVersion:z.string().optional(),executable:workspaceSchema,modelRequested:modelSchema,modelActual:modelSchema.optional(),thinking:z.enum(THINKING).optional(),parentJobId:jobIdSchema.optional(),workerNonce:jobIdSchema,ownerPid:z.number().int().positive().optional(),childPgid:z.number().int().positive().optional(),heartbeatAt:z.string().datetime().optional(),result:z.record(z.unknown()).optional(),error:z.object({code:z.enum(ERROR_CODES),message:z.string()}).strict().optional(),warnings:z.array(z.string()),activity:z.string().optional()
+ version:z.literal(1),id:jobIdSchema,workspace:workspaceSchema,lockKey:workspaceSchema,status:z.enum(STATUSES),createdAt:z.string().datetime(),updatedAt:z.string().datetime(),sessionId:z.string().min(1).optional(),sessionDir:workspaceSchema,sessionFile:workspaceSchema.optional(),ompVersion:z.string().optional(),executable:workspaceSchema,modelRequested:modelSchema,modelActual:modelSchema.optional(),thinking:z.enum(THINKING).optional(),parentJobId:jobIdSchema.optional(),workerNonce:jobIdSchema,ownerPid:z.number().int().positive().optional(),childPgid:z.number().int().positive().optional(),heartbeatAt:z.string().datetime().optional(),result:z.record(z.unknown()).optional(),error:z.object({code:z.enum(ERROR_CODES),message:z.string()}).strict().optional(),warnings:z.array(z.string()),activity:z.string().optional(),usage:usageSchema.optional(),recentActivity:z.array(z.string().max(160)).max(LIMITS.recentActivity).optional()
 }).strict();
 /** Resolve configured aliases without changing global config or providers.
  * @param {Record<string,string>} roles @param {string} [selector] @param {typeof THINKING[number]} [thinking]

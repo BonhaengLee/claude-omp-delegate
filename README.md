@@ -11,7 +11,7 @@ claude plugin install omp@claude-omp-delegate --scope user
 
 ### What it looks like
 
-A real run (OMP 18.3.2, 2026-09-26), shortened only where marked:
+A real run (OMP 18.3.2, 2026-09-26); only the artifact paths are shortened:
 
 ```text
 you    > /omp:implement create add.js exporting add(a, b) and add.test.mjs asserting add(2, 3) === 5
@@ -26,22 +26,39 @@ Change
 Verification
 - Observed OMP exit code: 0
 - Actual model: openai-codex/gpt-6-astra
+- Tokens: 2.7k in / 286 out / 114k cache read · OMP cost estimate $0.16 (5 model responses; estimate from OMP, not a bill)
 - 4 tool result(s) observed; acceptance is not judged PASS automatically.
 - Before/after workspace evidence was saved.
 
 Caution
 - OMP finished. Review the diff and acceptance yourself.
 - Final text and run result artifact: ~/.local/state/claude-omp-delegate/…/result.json
-  (event and stderr log paths omitted here)
 
 Next action
 - Review the workspace diff and acceptance.
-- Send further requests with /omp:followup 59e8193b-06df-4fdb-83f8-78b47517e7e7 <request>.
+- Send further requests with /omp:followup b6092b88-c6f3-474f-aa09-668b26ec27fa <request>.
 ```
+
+While a job runs, `/omp:status` also shows the latest tools (for example `+8s write ok, +12s write ok, +17s eval ok`); tool arguments are never copied into job state.
 
 Cards are English by default and Korean with `OMP_DELEGATE_LANG=ko` or a Korean system locale.
 
 > **Positioning:** this is a local-first integration, not a new model runner, account manager, sandbox, or web dashboard.
+
+## Guarantees you can check
+
+Delegating work to another agent is only useful if you can trust what comes back. Each guarantee below is enforced in code and pinned by a named test in `tests/`, and `npm run e2e:host` re-checks the core path against a real OMP.
+
+| Guarantee | What it prevents | Test |
+| --- | --- | --- |
+| `cancelled` is reported only after the OMP process group is gone; otherwise `CANCEL_UNCONFIRMED` and the lock is kept | A "cancelled" job that is still editing your files | `cancels a real grandchild by process group and confirms termination`, `does not claim cancellation when the live process group cannot be signalled` |
+| Follow-up resumes the exact recorded OMP session and never falls back to "latest" or a fresh session | Your follow-up landing in some other conversation | `resume pins the recorded transcript and rejects same-id duplicates before spawning`, `followup without id rejects multiple sessions and accepts one unique session` |
+| Jobs survive Claude exiting, restarting, or switching profiles | Losing track of a half-finished background edit | `a killed client leaves its detached worker alive`, `company and personal Claude profiles see the same jobs` |
+| One job per repository at a time | Two agents editing the same tree | `independent clients serialize one workspace lock and share one state root` |
+| Changes come from a git before/after snapshot, not the agent's summary; pre-existing dirty files are never attributed to the job; edits outside `writeScope` are flagged | Trusting "all tests pass" prose, or blaming the agent for your own edits | `preserved dirty and untracked files are baseline, not worker change warnings` |
+| Start/follow-up are blocked in Plan mode; malformed hook input fails closed | Implementation starting while you are still planning | `mutating start/followup are blocked in Plan mode and malformed input fails closed` |
+| OMP children cannot start another delegate job | Recursive delegation loops | `recursion depth disables delegation tools but keeps stdio transport alive` |
+| Token and cost figures are counted once per model response | Double-counted cost | `worker records OMP usage once per model response and a secret-free recent tool list` |
 
 ## What it provides
 
@@ -104,7 +121,7 @@ Follow these steps literally. Stop and report at the first failing check instead
 Every [GitHub Release](https://github.com/BonhaengLee/claude-omp-delegate/releases) also carries a self-contained marketplace archive and its checksum. The archive includes its runtime; do not run npm commands inside it.
 
 ```sh
-VERSION=0.1.2
+VERSION=0.1.3
 # macOS (Linux: use sha256sum -c instead)
 shasum -a 256 -c claude-omp-delegate-$VERSION-marketplace.tgz.sha256
 tar -xzf claude-omp-delegate-$VERSION-marketplace.tgz

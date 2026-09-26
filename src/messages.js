@@ -91,6 +91,10 @@ const en = {
   notStarted: 'No job was started.',
   ambiguous: 'AMBIGUOUS_SESSION: there are several different sessions to resume.',
   askOnce: 'Ask the user once which session to continue. Never pick the newest one arbitrarily.',
+  usage: /** @param {string} tokens @param {string} cost @param {number} messages */ (tokens, cost, messages) => 'Tokens: ' + tokens + ' · OMP cost estimate ' + cost + ' (' + messages + ' model response' + (messages === 1 ? '' : 's') + '; estimate from OMP, not a bill)',
+  tokenParts: /** @param {string} input @param {string} output @param {string} cache */ (input, output, cache) => input + ' in / ' + output + ' out / ' + cache + ' cache read',
+  recent: 'Recent tools: ',
+  listedCost: /** @param {string} cost @param {number} jobs */ (cost, jobs) => 'OMP cost estimate across ' + jobs + ' listed job' + (jobs === 1 ? '' : 's') + ': ' + cost,
 };
 
 /** @type {typeof en} */
@@ -167,6 +171,10 @@ const ko = {
   notStarted: '작업을 시작하지 않았습니다.',
   ambiguous: 'AMBIGUOUS_SESSION: 서로 다른 재개 후보가 있습니다.',
   askOnce: '선택 UI로 이어갈 세션을 한 번 질문하세요. 임의 최신 선택은 금지합니다.',
+  usage: (tokens, cost, messages) => '토큰: ' + tokens + ' · OMP 추정 비용 ' + cost + ' (모델 응답 ' + messages + '회; OMP 가 계산한 추정치이며 청구액이 아님)',
+  tokenParts: (input, output, cache) => '입력 ' + input + ' / 출력 ' + output + ' / 캐시 읽기 ' + cache,
+  recent: '최근 도구: ',
+  listedCost: (cost, jobs) => '표시된 작업 ' + jobs + '건의 OMP 추정 비용 합계: ' + cost,
 };
 
 export const MESSAGES = Object.freeze({ en, ko });
