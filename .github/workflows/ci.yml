@@ -48,6 +48,7 @@ jobs:
               names = [member.name for member in archive]
           assert not any(part.startswith("._") for name in names for part in name.split("/")), "AppleDouble metadata leaked"
           assert not any("verify/" in name or "docs/implementation-plan.md" in name for name in names), "Private artifact leaked"
+          with tarfile.open(archives[0], "r:gz") as archive:
               owners = {(m.uname, m.gname, m.uid, m.gid) for m in archive.getmembers()}
               xattrs = {k for m in archive.getmembers() for k in m.pax_headers if "xattr" in k.lower() or k.startswith("LIBARCHIVE.")}
           assert owners == {("", "", 0, 0)}, f"builder account leaked into tar headers: {owners}"
