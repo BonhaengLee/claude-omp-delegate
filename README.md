@@ -1,6 +1,45 @@
 # claude-omp-delegate
 
-`claude-omp-delegate` is a Claude Code plugin for delegating an approved implementation brief to an existing OMP/Codex harness. Claude remains the planner, conversational interface, and reviewer; OMP remains the implementation executor. The plugin adds an explicit hand-off, durable job state, resumable OMP sessions, and compact result/evidence cards without replacing either tool.
+**Hand implementation work from Claude Code to [OMP (oh-my-pi)](https://github.com/can1357/oh-my-pi), then track, resume, cancel, and review it without leaving Claude.**
+
+Claude stays the planner, conversation partner, and reviewer. Your locally installed OMP coding agent (with your own OMP config, skills, and account) does the implementation in the background. The plugin adds an explicit hand-off, durable job state that survives Claude restarts, resumable OMP sessions, and evidence-first result cards.
+
+```sh
+claude plugin marketplace add BonhaengLee/claude-omp-delegate
+claude plugin install omp@claude-omp-delegate --scope user
+```
+
+### What it looks like
+
+A real run (OMP 18.3.2, 2026-09-26), shortened only where marked:
+
+```text
+you    > /omp:implement create add.js exporting add(a, b) and add.test.mjs asserting add(2, 3) === 5
+claude > [writes the brief: goal / decisions / writeScope add.js, add.test.mjs / acceptance / verification]
+         [starts the job; the conversation stays free while OMP works in the background]
+
+claude > [completion notification] /omp:result
+Change
+- add.js
+- add.test.mjs
+
+Verification
+- Observed OMP exit code: 0
+- Actual model: openai-codex/gpt-6-astra
+- 4 tool result(s) observed; acceptance is not judged PASS automatically.
+- Before/after workspace evidence was saved.
+
+Caution
+- OMP finished. Review the diff and acceptance yourself.
+- Final text and run result artifact: ~/.local/state/claude-omp-delegate/…/result.json
+  (event and stderr log paths omitted here)
+
+Next action
+- Review the workspace diff and acceptance.
+- Send further requests with /omp:followup 59e8193b-06df-4fdb-83f8-78b47517e7e7 <request>.
+```
+
+Cards are English by default and Korean with `OMP_DELEGATE_LANG=ko` or a Korean system locale.
 
 > **Positioning:** this is a local-first integration, not a new model runner, account manager, sandbox, or web dashboard.
 
@@ -65,7 +104,7 @@ Follow these steps literally. Stop and report at the first failing check instead
 Every [GitHub Release](https://github.com/BonhaengLee/claude-omp-delegate/releases) also carries a self-contained marketplace archive and its checksum. The archive includes its runtime; do not run npm commands inside it.
 
 ```sh
-VERSION=0.1.1
+VERSION=0.1.2
 # macOS (Linux: use sha256sum -c instead)
 shasum -a 256 -c claude-omp-delegate-$VERSION-marketplace.tgz.sha256
 tar -xzf claude-omp-delegate-$VERSION-marketplace.tgz
@@ -136,7 +175,7 @@ The PreToolUse hook examines MCP calls only. It fails closed when hook JSON, `pe
 - The OMP child receives a recursion guard (`OMP_DELEGATE_DEPTH=1`), so an inherited delegate plugin cannot recursively start another delegate job. A recursion-blocked server exposes no mutating tools.
 - Dirty worktrees are allowed. The baseline is captured for evidence; pre-existing changes are not attributed to the worker, committed, stashed, reset, or reverted.
 - A cancellation may leave files changed. Inspect the current diff before starting follow-up work.
-- Command descriptions and documentation are English. Status/result cards currently use Korean labels (Change, Verification, Caution, and Next action).
+- Command prompts and documentation are English. Result cards are English by default; set `OMP_DELEGATE_LANG=ko` (or use a Korean system locale) for Korean. Machine-readable fields (`status`, `data`, error `code`) are identical in both languages.
 - The plugin is not an OS sandbox. A brief's write scope cannot prevent OMP from writing elsewhere; out-of-scope changes are reported for review.
 - The plugin does not auto-publish, auto-update OMP, log in, switch Claude accounts, send Telegram notifications, or guarantee a reconnect push notification. Use `/omp:status` after reconnecting.
 

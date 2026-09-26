@@ -1,9 +1,20 @@
 {
   "name": "omp",
-  "version": "0.1.1",
-  "description": "Delegate an approved implementation brief to the local OMP runner.",
+  "version": "0.1.2",
+  "description": "Delegate approved implementation briefs from Claude Code to a local OMP (oh-my-pi) coding agent, with durable jobs, resume, cancel, and evidence cards.",
   "author": {
     "name": "BonhaengLee",
     "url": "https://github.com/BonhaengLee/claude-omp-delegate"
-  }
+  },
+  "homepage": "https://github.com/BonhaengLee/claude-omp-delegate",
+  "repository": "https://github.com/BonhaengLee/claude-omp-delegate",
+  "license": "MIT",
+  "keywords": [
+    "omp",
+    "oh-my-pi",
+    "codex",
+    "delegation",
+    "agents",
+    "mcp"
+  ]
 }

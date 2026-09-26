@@ -28,6 +28,7 @@ const REQUIRED_FILES = [
   'tsconfig.json',
   'plugins/omp/.claude-plugin/plugin.json',
   'plugins/omp/.mcp.json',
+  'plugins/omp/README.md',
 ];
 const REQUIRED_DIRECTORIES = ['src', 'scripts', 'tests', 'plugins/omp/commands', 'plugins/omp/hooks', 'plugins/omp/scripts', 'docs/public', 'licenses'];
 const CANDIDATE_FILES = [...REQUIRED_FILES, '.github/workflows/ci.yml', '.github/workflows/omp-compat.yml'];

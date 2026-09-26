@@ -1,4 +1,5 @@
 import test from 'node:test';
+process.env.OMP_DELEGATE_LANG = 'ko';
 import assert from 'node:assert/strict';
 import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -79,7 +80,7 @@ test('cancel and doctor use the shared envelope renderer', () => {
     assert.doesNotMatch(terminalRendered.summary, /취소 요청이 기록되었습니다|OMP 구현 중|실행 중입니다/);
   }
   const doctor = renderDoctor({ executable: '/tmp/omp', ompVersion: '18.3.0', warnings: [], active: [] });
-  assert.match(doctor.summary, /TUI statusline과 Telegram extension/);
-  assert.equal(doctor.data.launcher.cxd, false);
+  assert.doesNotMatch(doctor.summary, /cxd|Telegram/);
+  assert.equal('launcher' in doctor.data, false);
   assert.equal(typeof doctor.data.platform.supported, 'boolean');
 });

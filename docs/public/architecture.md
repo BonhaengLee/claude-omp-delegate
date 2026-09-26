@@ -110,7 +110,7 @@ This project does not:
 
 - copy or migrate Claude transcripts, credentials, or account sessions;
 - automatically log in, change Claude profiles, update OMP, or choose another provider/model;
-- provide an OS sandbox, web dashboard, cloud service, Telegram/cxd launcher, or automatic reconnect push;
+- provide an OS sandbox, web dashboard, cloud service, chat-notification launcher, or automatic reconnect push;
 - commit, stash, reset, revert, or otherwise roll back workspace changes;
 - infer acceptance PASS from a final model message, a tool payload, or an exit code alone.
 

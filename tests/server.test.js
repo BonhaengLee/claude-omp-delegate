@@ -33,7 +33,7 @@ async function connectFixture(workspace, recursive = false) {
   const serverHref = pathToFileURL(path.join(ROOT, 'src/server.js')).href;
   await writeFile(fixture, fixtureSource(serverHref), { mode: 0o700 });
   const stderr = [];
-  const transport = new StdioClientTransport({ command: NODE, args: [fixture], cwd: ROOT, stderr: 'pipe', env: { ...process.env, OMP_DELEGATE_DEPTH: recursive ? '1' : '0', TEST_WORKSPACE: workspace, OMP_DELEGATE_STATE_DIR: directory } });
+  const transport = new StdioClientTransport({ command: NODE, args: [fixture], cwd: ROOT, stderr: 'pipe', env: { ...process.env, OMP_DELEGATE_LANG: 'ko', OMP_DELEGATE_DEPTH: recursive ? '1' : '0', TEST_WORKSPACE: workspace, OMP_DELEGATE_STATE_DIR: directory } });
   transport.stderr?.on('data', (chunk) => stderr.push(String(chunk)));
   const client = new Client({ name: 'server-test-client', version: '1.0.0' });
   await client.connect(transport);

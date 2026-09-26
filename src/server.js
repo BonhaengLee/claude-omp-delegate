@@ -150,7 +150,7 @@ export function buildServer(options = {}) {
   const recursionBlocked = options.recursionBlocked ?? process.env.OMP_DELEGATE_DEPTH === '1';
   const server = new McpServer(
     { name: SERVER_NAME, version: SERVER_VERSION },
-    { instructions: 'OMP 작업은 명시적 omp_start/omp_followup 도구로만 시작합니다. 결과의 diff와 acceptance를 직접 검토하세요.' },
+    { instructions: 'Start OMP work only through explicit omp_start/omp_followup calls. Review the resulting diff and acceptance yourself.' },
   );
 
   if (recursionBlocked) {

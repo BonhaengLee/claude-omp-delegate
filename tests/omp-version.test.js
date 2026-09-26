@@ -1,4 +1,5 @@
 import test from 'node:test';
+process.env.OMP_DELEGATE_LANG = 'ko';
 import assert from 'node:assert/strict';
 import { chmod, mkdtemp, realpath, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';

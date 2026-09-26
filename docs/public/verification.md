@@ -114,3 +114,7 @@ Scope: macOS arm64, Node.js 24.13.0, Claude Code 2.1.283. Each run used the pack
 The 18.3.1 and 18.3.2 upstream changelogs list no change to the command-line flags or JSON event stream this plugin consumes (`--mode`, `--json`, `--resume`, `--session-dir`, `--model`, `--thinking`); the only listed breaking change is a TUI editor API. Unknown JSON event types remain tolerated by the reducer.
 
 Release-archive privacy: tar headers are written with an empty owner, uid/gid 0, and no extended attributes; the plugin zip is written with `zip -X`. `release:archive` parses the produced headers and fails if a builder account, uid/gid, or xattr remains. The 0.1.0 archive predates this check; its headers recorded the build machine's local account name.
+
+## Recorded checks for 0.1.2 (2026-09-26)
+
+0.1.2 moves card text into `src/messages.js` (English default, Korean via `OMP_DELEGATE_LANG=ko` or a Korean locale), translates the command prompts to English, and removes launcher notes that only applied to the maintainer's own setup. Runtime protocol handling is unchanged. `OMP_DELEGATE_LANG=en node scripts/host-e2e.mjs --omp <OMP 18.3.2>` passed all eight checks (doctor, start, completion, result, independent `node add.test.mjs`, write-scope-only changes, README untouched, recorded OMP version) on macOS arm64, Node.js 24.13.0. The README example card is rendered from a real 18.3.2 job by the new English renderer.
