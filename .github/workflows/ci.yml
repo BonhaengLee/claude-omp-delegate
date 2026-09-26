@@ -34,19 +34,31 @@ jobs:
         run: npm audit --omit=dev --audit-level=high
       - name: Run typecheck and fixture tests
         run: npm run verify
+      - name: Check the repository marketplace entry
+        run: npm run marketplace:check
       - name: Build and validate the self-contained release archive
         run: npm run release:archive
       - name: Inspect portable archive contents independently
         run: |
           python3 - <<'PY'
-          import pathlib, tarfile
+          import pathlib, tarfile, zipfile
           archives = list(pathlib.Path("dist").glob("*-marketplace.tgz"))
           assert len(archives) == 1, archives
           with tarfile.open(archives[0], "r:gz") as archive:
               names = [member.name for member in archive]
           assert not any(part.startswith("._") for name in names for part in name.split("/")), "AppleDouble metadata leaked"
           assert not any("verify/" in name or "docs/implementation-plan.md" in name for name in names), "Private artifact leaked"
+              owners = {(m.uname, m.gname, m.uid, m.gid) for m in archive.getmembers()}
+              xattrs = {k for m in archive.getmembers() for k in m.pax_headers if "xattr" in k.lower() or k.startswith("LIBARCHIVE.")}
+          assert owners == {("", "", 0, 0)}, f"builder account leaked into tar headers: {owners}"
+          assert not xattrs, f"extended attributes leaked: {xattrs}"
           for document in ("architecture.md", "verification.md"):
               assert "claude-omp-delegate/docs/public/" + document in names, document
-          print(f"Portable archive verified: {len(names)} entries")
+          zips = list(pathlib.Path("dist").glob("claude-omp-delegate-omp-*.zip"))
+          assert len(zips) == 1, zips
+          with zipfile.ZipFile(zips[0]) as plugin_zip:
+              zip_names = plugin_zip.namelist()
+              assert "omp/.claude-plugin/plugin.json" in zip_names and "omp/runtime/server.js" in zip_names, "plugin zip layout"
+              assert not any(part.startswith("._") or part == "__MACOSX" for n in zip_names for part in n.split("/")), "macOS metadata in zip"
+          print(f"Portable archive verified: {len(names)} tar entries, {len(zip_names)} zip entries")
           PY

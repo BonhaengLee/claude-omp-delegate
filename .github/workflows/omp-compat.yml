@@ -1,0 +1,26 @@
+name: OMP compatibility
+
+on:
+  schedule:
+    - cron: '17 3 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  latest-omp:
+    name: Classify latest OMP release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22.x
+          cache: npm
+      - name: Install pinned dependencies
+        run: npm ci
+      - name: Classify the latest published OMP
+        run: npm run check:omp-compat

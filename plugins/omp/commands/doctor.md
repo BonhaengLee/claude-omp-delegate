@@ -1,7 +1,7 @@
 ---
 description: Diagnose the OMP executable, shared state, and permission guard
 ---
-MCP omp_doctor({workspace})를 호출하고 실행 파일 경로·18.3.0 호환성·공용 설정/상태 권한·hook 상태·고아 작업 진단을 표시한다. 첫 실행에는 공용 상태 디렉터리와 config.json에 확인한 실행 파일 경로를 등록할 수 있다. 기존 OMP/Claude 설정·인증은 바꾸지 않는다. auth token/전체 환경은 출력하지 않는다. macOS/Linux만 지원한다.
+MCP omp_doctor({workspace})를 호출하고 실행 파일 경로·OMP 버전 정책(18.3.0 이상 19.0.0 미만, 검증 여부)·공용 설정/상태 권한·hook 상태·고아 작업 진단을 표시한다. 첫 실행에는 공용 상태 디렉터리와 config.json에 확인한 실행 파일 경로를 등록할 수 있다. 기존 OMP/Claude 설정·인증은 바꾸지 않는다. auth token/전체 환경은 출력하지 않는다. macOS/Linux만 지원한다.
 기존 skills/rules/MCP/extension 발견은 유지하지만 cxd가 명시적으로 추가하는 TUI statusline·Telegram extension을 이 플러그인이 추가 로드하지는 않는다. cxd alias와 완전히 같은 launcher라고 설명하지 않는다. Figma/Toss 인증 경고는 그대로 보고하며 임의 로그인·계정전환·업데이트를 하지 않는다.
 명시적 고아 복구 요청이 있을 때만 node "${CLAUDE_PLUGIN_ROOT}/runtime/cli.js" doctor --workspace <안전하게 quote한 absolute cwd> --recover <검증된 UUID>를 실행한다. PID 없음·heartbeat stale·child group ESRCH·nonce 일치를 모두 확인해야 하며 자동 재실행/불확실한 kill은 없다. 기본 모델 변경은 기존 OMP /models·config를 안내하고 여기서 글로벌 설정을 덮지 않는다.
 

@@ -15,50 +15,77 @@
 
 `writeScope` is review guidance, **not an operating-system sandbox**. OMP and the worker run with the current OS user's permissions; review the diff and acceptance evidence before accepting a result.
 
-## Prerequisites
+## Quick install
 
-- Node.js **20 or newer**.
-- OMP **18.3.0** installed and available as `omp` on `PATH`.
-- Claude Code with local plugin/marketplace and MCP support.
-- macOS or Linux. Windows process-group handling is intentionally unsupported.
-
-The plugin uses OMP's existing authentication and configuration. It does not install OMP, perform login, or provide an automatic Claude-account fallback.
-
-## Release-archive installation
-
-Download the marketplace archive and its `.sha256` file from [GitHub Releases](https://github.com/BonhaengLee/claude-omp-delegate/releases). The archive already contains its production runtime; do not run npm commands in the extracted distribution.
+Two commands, identical for a person at a terminal and for an AI agent running shell commands:
 
 ```sh
+claude plugin marketplace add BonhaengLee/claude-omp-delegate
+claude plugin install omp@claude-omp-delegate --scope user
+```
+
+Then restart Claude Code and run `/omp:doctor` in the workspace where jobs should run. The marketplace entry points at a release zip pinned by SHA-256 (Claude Code refuses a mismatching download), and the zip already contains the production runtime. No `git clone`, `npm`, or build step is needed on your machine.
+
+Update later with:
+
+```sh
+claude plugin marketplace update claude-omp-delegate
+claude plugin update omp@claude-omp-delegate
+```
+
+## Prerequisites
+
+| Requirement | Check | If missing |
+| --- | --- | --- |
+| macOS or Linux | `uname -s` prints `Darwin` or `Linux` | Windows is intentionally unsupported (process-group handling). |
+| Node.js 20+ | `node --version` | Install Node.js 20 or newer. |
+| Claude Code with plugin support | `claude plugin --help` | Update Claude Code (`claude update`). The archive plugin source was verified with Claude Code 2.1.283. |
+| OMP (oh-my-pi) 18.3.0 or newer, below 19.0.0, on `PATH` | `omp --version` prints `omp/18.x.y` | `curl -fsSL https://omp.sh/install \| sh` (or `brew install can1357/tap/omp`, `bun install -g @oh-my-pi/pi-coding-agent`). See [oh-my-pi](https://github.com/can1357/oh-my-pi). |
+| OMP signed in, default model resolving to `openai-codex/<id>` | `omp` works interactively in any repo | Sign in through OMP itself. This plugin never logs in or picks an account for you. |
+
+### OMP version policy
+
+- **Tested** versions have recorded real-host evidence: `18.3.0`, `18.3.2`. Doctor shows `(검증됨)`.
+- Any other version from `18.3.0` up to (but excluding) `19.0.0` runs normally, with a warning that it has no recorded host verification yet.
+- Versions outside that range are refused with install/upgrade guidance. To run one anyway, start Claude with `OMP_DELEGATE_ALLOW_UNSUPPORTED_OMP=1`; every job then carries a warning.
+- A daily CI job classifies the newest published OMP, so the maintainer sees an out-of-range release before users do.
+
+## For AI agents installing this plugin
+
+Follow these steps literally. Stop and report at the first failing check instead of improvising.
+
+1. Run each **Check** in the prerequisites table. If OMP is missing, you may run the official installer only when the user asked you to install OMP; never sign in, switch accounts, or change OMP's global model on their behalf.
+2. Run the two **Quick install** commands. `claude plugin list --json` must then list `omp@claude-omp-delegate` as enabled.
+3. Tell the user to restart Claude Code, then run `/omp:doctor` from the target workspace.
+4. Success means doctor reports `status: ok`, the OMP version, and `hooks.json=true, guard.cjs=true`. `VERSION_UNSUPPORTED` or `OMP_NOT_FOUND` responses carry the exact remedy in `nextActions`.
+5. Do not start `/omp:implement` as part of installation. Delegation needs an explicit user request.
+
+## Offline / pinned installation
+
+Every [GitHub Release](https://github.com/BonhaengLee/claude-omp-delegate/releases) also carries a self-contained marketplace archive and its checksum. The archive includes its runtime; do not run npm commands inside it.
+
+```sh
+VERSION=0.1.1
 # macOS (Linux: use sha256sum -c instead)
-shasum -a 256 -c claude-omp-delegate-0.1.0-marketplace.tgz.sha256
-tar -xzf claude-omp-delegate-0.1.0-marketplace.tgz
+shasum -a 256 -c claude-omp-delegate-$VERSION-marketplace.tgz.sha256
+tar -xzf claude-omp-delegate-$VERSION-marketplace.tgz
 claude plugin marketplace add "$PWD/claude-omp-delegate"
 claude plugin install omp@local-omp-delegate --scope user
 ```
 
-Restart Claude after installation. Use a source checkout, below, for development.
+## Development from a source checkout
 
-## Source-checkout installation
-
-The supported initial installation path is a source checkout followed by an explicit package step:
+A plain `git clone` is **not** installable: the generated runtime (`plugins/omp/runtime/`) is intentionally not committed. Build it first:
 
 ```sh
 git clone https://github.com/BonhaengLee/claude-omp-delegate.git
 cd claude-omp-delegate
 npm ci
 npm run package
+claude --plugin-dir "$PWD/plugins/omp"
 ```
 
-`npm run package` creates the self-contained plugin runtime under `plugins/omp/runtime/`, including production dependencies and required license files. The source repository ignores both `node_modules/` and generated `plugins/omp/runtime/`; the checkout intentionally does not rely on either being prebuilt or checked in. The runtime must be rebuilt after source changes.
-
-Add that checkout as a local Claude marketplace and install the `omp` plugin:
-
-```sh
-claude plugin marketplace add /absolute/path/to/claude-omp-delegate
-claude plugin install omp@local-omp-delegate --scope user
-```
-
-After changing source, rebuild the runtime. During development, start Claude with `claude --plugin-dir /absolute/path/to/claude-omp-delegate/plugins/omp` to avoid relying on an older installed cache. Publish a new version for installed-plugin updates. A GitHub marketplace one-click install is **not** claimed for the source checkout: a release archive with a self-contained runtime is the intended distribution artifact. Do not infer release, CI, or live-host success from the presence of files alone.
+`npm run package` creates the self-contained runtime, including production dependencies and required license files. Rebuild it after every source change; `--plugin-dir` avoids an older installed cache. `npm run e2e:host` runs one real delegated job against your installed OMP in an isolated state directory and throwaway repository (it spends one small model run). Do not infer release, CI, or live-host success from the presence of files alone.
 
 ## First diagnostic
 
@@ -68,9 +95,9 @@ From the workspace where jobs should run:
 /omp:doctor
 ```
 
-Doctor checks the platform, configured OMP executable, exact OMP version, plugin hook files, shared state, and stale-job diagnostics. It may initialize the plugin-owned state directory and `config.json` on first use. That write is limited to this plugin's state; doctor does not change Claude/OMP settings, authenticate, update OMP, or choose an account.
+Doctor checks the platform, the configured OMP executable and its version against the policy above, plugin hook files, shared state, and stale-job diagnostics. It may initialize the plugin-owned state directory and `config.json` on first use. That write is limited to this plugin's state; doctor does not change Claude/OMP settings, authenticate, update OMP, or choose an account.
 
-If the OMP executable is not already configured, doctor discovers an executable named `omp` on `PATH`, verifies `18.3.0`, and records its absolute path in plugin-owned state. A missing or incompatible executable is an error, not an invitation to install or substitute another runner.
+If the OMP executable is not already configured, doctor discovers an executable named `omp` on `PATH`, checks its version, and records its absolute path in plugin-owned state. A missing or out-of-range executable is an error with the remedy in `nextActions`; the plugin never installs or substitutes another runner by itself.
 
 ## Slash commands
 

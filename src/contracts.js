@@ -1,6 +1,38 @@
 import { z } from 'zod';
 import path from 'node:path';
-export const SUPPORTED_OMP_VERSION = '18.3.0';
+/**
+ * OMP compatibility policy. `tested` lists versions with recorded real-host evidence (docs/public/verification.md).
+ * Any other version inside [min, belowMajor.0.0) runs with a warning; versions outside the range are refused
+ * unless OMP_DELEGATE_ALLOW_UNSUPPORTED_OMP=1, which downgrades the refusal to a warning.
+ */
+export const OMP_COMPAT = Object.freeze({ min: '18.3.0', belowMajor: 19, tested: Object.freeze(['18.3.0', '18.3.2']) });
+export const OMP_ALLOW_UNSUPPORTED_ENV = 'OMP_DELEGATE_ALLOW_UNSUPPORTED_OMP';
+export const OMP_INSTALL_HINTS = Object.freeze([
+  'Install or update OMP: curl -fsSL https://omp.sh/install | sh',
+  'Alternatives: brew install can1357/tap/omp  |  bun install -g @oh-my-pi/pi-coding-agent',
+]);
+/** @param {string} value @returns {[number,number,number]|undefined} */
+export function parseSemver(value) {
+  const match = /^(\d+)\.(\d+)\.(\d+)$/.exec(value);
+  return match ? [Number(match[1]), Number(match[2]), Number(match[3])] : undefined;
+}
+/** @param {[number,number,number]} a @param {[number,number,number]} b */
+function compareSemver(a, b) { for (let i = 0; i < 3; i += 1) if (a[i] !== b[i]) return a[i] - b[i]; return 0; }
+/**
+ * @param {string} version
+ * @param {boolean} [allowUnsupported]
+ * @returns {{status:'tested'|'untested'|'unsupported', accepted:boolean, warning?:string}}
+ */
+export function classifyOmpVersion(version, allowUnsupported = false) {
+  const parsed = parseSemver(version); const min = /** @type {[number,number,number]} */ (parseSemver(OMP_COMPAT.min));
+  const range = OMP_COMPAT.min + ' <= version < ' + OMP_COMPAT.belowMajor + '.0.0';
+  if (!parsed || compareSemver(parsed, min) < 0 || parsed[0] >= OMP_COMPAT.belowMajor) {
+    const reason = 'OMP ' + version + ' is outside the supported range (' + range + ')';
+    return allowUnsupported ? { status: 'unsupported', accepted: true, warning: reason + '; running anyway because ' + OMP_ALLOW_UNSUPPORTED_ENV + '=1.' } : { status: 'unsupported', accepted: false, warning: reason + '.' };
+  }
+  if (OMP_COMPAT.tested.includes(version)) return { status: 'tested', accepted: true };
+  return { status: 'untested', accepted: true, warning: 'OMP ' + version + ' is inside the supported range but has no recorded host verification (tested: ' + OMP_COMPAT.tested.join(', ') + ').' };
+}
 export const LIMITS = Object.freeze({ lineBytes: 16 * 1024 * 1024, stderrBytes: 64 * 1024, previewBytes: 2048, startupMs: 120000, termMs: 5000, killMs: 5000, readyMs: 5000, heartbeatMs: 2000, staleMs: 30000, cancelPollMs: 250 });
 export const THINKING = /** @type {const} */ (['off','minimal','low','medium','high','xhigh','max','auto']);
 export const STATUSES = /** @type {const} */ (['starting','running','cancelling','completed','failed','cancelled','interrupted']);

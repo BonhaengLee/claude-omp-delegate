@@ -15,7 +15,7 @@ These instructions apply to automated and human contributors working in this rep
 1. **Freeze source.** Finish source changes and inspect the intended diff. Do not collect runtime evidence while the source is still moving.
 2. **Typecheck/tests.** Run the deterministic checks after the final source edit (`npm run verify`, or the narrowed commands with a recorded reason).
 3. **Package/parity.** Rebuild with `npm run package`; then run `npm run check:package` and any relevant parity checks. Source, hook, command, and dependency-lock changes invalidate affected package/host evidence. Check installed-profile bytes and dependency versions too: a same-version plugin update can report success without replacing its cache.
-4. **Actual host evidence.** Run manual Claude/OMP 18.3.0 scenarios on a supported macOS/Linux host. Keep fixture/test results separate from interactive host observations.
+4. **Actual host evidence.** Run `npm run e2e:host` and the manual Claude/OMP scenarios with a tested OMP version (`OMP_COMPAT.tested` in `src/contracts.js`) on a supported macOS/Linux host. Keep fixture/test results separate from interactive host observations.
 5. **Publish only after evidence.** Release/archive steps package what was verified; they do not turn unverified behavior into PASS.
 
 ## Evidence hygiene

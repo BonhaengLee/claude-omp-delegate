@@ -18,7 +18,7 @@ Thank you for improving `claude-omp-delegate`. Contributions should keep the han
 npm ci
 ```
 
-Use Node.js 20 or newer and an installed OMP 18.3.0 when running host-dependent checks. The source package and the generated plugin runtime are separate surfaces: `plugins/omp/runtime/` is generated and must not be hand-edited.
+Use Node.js 20 or newer and a tested OMP version (`OMP_COMPAT.tested` in `src/contracts.js`) when running host-dependent checks. The source package and the generated plugin runtime are separate surfaces: `plugins/omp/runtime/` is generated and must not be hand-edited.
 
 ## Verification workflow
 
@@ -29,8 +29,10 @@ Use the scripts in this order; each later stage depends on the preceding source 
 3. **Package.** Run `npm run package` to rebuild the self-contained plugin runtime from the current source and lockfile.
 4. **Package parity.** Run `npm run check:package`; it must inspect the generated ownership manifest, production dependency closure, entrypoints, and absence of credentials/transcripts.
 5. **Public-file checks.** Run `npm run check:public` for links, required public files, and forbidden personal/configuration material.
-6. **Actual host evidence.** On a supported macOS/Linux host with OMP 18.3.0 and Claude Code, run the manual scenarios in [docs/public/verification.md](docs/public/verification.md). Keep these results separate from fixture/test output.
+6. **Actual host evidence.** On a supported macOS/Linux host with a tested OMP version (`OMP_COMPAT.tested` in `src/contracts.js`) and Claude Code, run `npm run e2e:host` and the manual scenarios in [docs/public/verification.md](docs/public/verification.md). Keep these results separate from fixture/test output.
 7. **Publish only after evidence.** `npm run release:archive` is a packaging step, not proof that installation or live behavior passed. Never auto-publish from a worktree.
+8. **Release order.** Bump `package.json`, `package-lock.json`, and `plugins/omp/.claude-plugin/plugin.json` together; run `npm run release:archive`; `npm run marketplace:set` (points `.claude-plugin/marketplace.json` at the new zip digest); commit and push; wait for green CI; create the GitHub release `v<version>` on that commit with the tgz, zip, and both `.sha256` files built in the same run; then `npm run marketplace:verify` must download the published zip and match the digest.
+9. **New OMP releases.** When the daily `OMP compatibility` workflow warns about an untested version, run `npm run e2e:host -- --omp <path>` against it and add the version to `OMP_COMPAT.tested` only with a recorded passing run. Raise `belowMajor` only after the same evidence on the new major.
 
 A source edit invalidates generated runtime parity and any host evidence from the previous package. Rebuild and repeat the relevant checks rather than reusing stale output.
 

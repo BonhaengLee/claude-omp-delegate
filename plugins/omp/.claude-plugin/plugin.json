@@ -1,8 +1,9 @@
 {
   "name": "omp",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Delegate an approved implementation brief to the local OMP runner.",
   "author": {
-    "name": "local"
+    "name": "BonhaengLee",
+    "url": "https://github.com/BonhaengLee/claude-omp-delegate"
   }
 }

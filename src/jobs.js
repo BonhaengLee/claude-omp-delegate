@@ -8,7 +8,7 @@ import { spawn } from 'node:child_process';
 import { constants as fsConstants } from 'node:fs';
 import { access, chmod, lstat, mkdir, open, readdir, readFile, realpath, rename, rm, writeFile } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
-import { DelegateError, LIMITS, SUPPORTED_OMP_VERSION, TERMINAL, briefSchema, parseBriefOptions, jobIdSchema, jobSchema, resolveModel, workspaceSchema } from './contracts.js';
+import { DelegateError, LIMITS, OMP_ALLOW_UNSUPPORTED_ENV, TERMINAL, classifyOmpVersion, briefSchema, parseBriefOptions, jobIdSchema, jobSchema, resolveModel, workspaceSchema } from './contracts.js';
 import { validateSession } from './runner.js';
 
 const MODE_DIR = 0o700;
@@ -242,8 +242,10 @@ async function executableVersion(executable) {
   if (result.code === null) throw failure('OMP_NOT_FOUND', 'Cannot execute OMP: ' + executable, result.stderr);
   if (result.code !== 0) throw failure('VERSION_UNSUPPORTED', 'OMP --version failed with exit ' + result.code, result.stderr);
   const match = result.stdout.match(/omp[\/ ](?:v)?([0-9]+\.[0-9]+\.[0-9]+)/i);
-  if (!match || match[1] !== SUPPORTED_OMP_VERSION) throw failure('VERSION_UNSUPPORTED', 'Expected OMP ' + SUPPORTED_OMP_VERSION + ', got: ' + result.stdout.trim());
-  return match[1];
+  if (!match) throw failure('VERSION_UNSUPPORTED', 'Cannot parse OMP --version output: ' + result.stdout.trim());
+  const verdict = classifyOmpVersion(match[1], process.env[OMP_ALLOW_UNSUPPORTED_ENV] === '1');
+  if (!verdict.accepted) throw failure('VERSION_UNSUPPORTED', verdict.warning ?? ('Unsupported OMP ' + match[1]), { version: match[1] });
+  return { version: match[1], status: verdict.status, warnings: verdict.warning ? [verdict.warning] : [] };
 }
 /** @param {unknown} value @param {string} target */
 function parseConfig(value, target) {
@@ -262,7 +264,7 @@ async function readConfig(target) {
 /** @param {string} workspace */
 async function discoverExecutable(workspace) {
   const state = await stateRoot(); const configPath = path.join(state, CONFIG_FILE); const configured = await readConfig(configPath);
-  let executable = configured?.executable;
+  let executable = configured?.executable; let versionInfo;
   if (!executable) {
     const candidates = (process.env.PATH ?? '').split(path.delimiter).filter(Boolean).map((dir) => path.join(dir, 'omp'));
     for (const candidate of candidates) {
@@ -270,13 +272,13 @@ async function discoverExecutable(workspace) {
       catch { executable = undefined; }
     }
     if (!executable) throw failure('OMP_NOT_FOUND', 'No executable named omp was found on PATH');
-    await executableVersion(executable); await writeJsonAtomic(configPath, { version: VERSION, executable });
+    versionInfo = await executableVersion(executable); await writeJsonAtomic(configPath, { version: VERSION, executable });
   } else {
     try { executable = await realpath(executable); const info = await lstat(executable); if (!info.isFile()) throw new Error('not a file'); await access(executable, fsConstants.X_OK); }
     catch (error) { throw failure('OMP_NOT_FOUND', 'Configured executable is unavailable: ' + (configured?.executable ?? ''), error); }
-    await executableVersion(executable);
+    versionInfo = await executableVersion(executable);
   }
-  return { executable, version: SUPPORTED_OMP_VERSION, configPath };
+  return { executable, version: versionInfo.version, versionStatus: versionInfo.status, versionWarnings: versionInfo.warnings, configPath };
 }
 /** @param {string} workspace @param {string} executable @param {string} selector @param {string|undefined} thinking */
 async function resolveJobModel(workspace, executable, selector, thinking) {
@@ -430,7 +432,7 @@ async function createJob(workspace, brief, parentJobId, sessionDir, sessionId, m
   const model = await resolveJobModel(layout.workspace, executableInfo.executable, modelOverride ?? parsedBrief.data.model ?? '@default', thinkingOverride ?? parsedBrief.data.thinking);
   const id = crypto.randomUUID(); const nonce = crypto.randomUUID(); const jobDir = path.join(layout.jobsRoot, id); const temporaryDir = path.join(layout.jobsRoot, '.job-' + id + '.tmp'); const actualSessionDir = sessionDir ?? path.join(jobDir, 'sessions'); const temporarySessionDir = sessionDir ?? path.join(temporaryDir, 'sessions');
   const baseline = await snapshotWorkspace(layout.workspace); const now = new Date().toISOString();
-  /** @type {import('./contracts.js').Job} */ const job = { version: VERSION, id, workspace: layout.workspace, lockKey: layout.lockKey, status: 'starting', createdAt: now, updatedAt: now, ...(sessionId ? { sessionId } : {}), sessionDir: actualSessionDir, ...(parentJobId ? { parentJobId } : {}), executable: executableInfo.executable, modelRequested: model.model, ompVersion: SUPPORTED_OMP_VERSION, ...(model.thinking ? { thinking: model.thinking } : {}), workerNonce: nonce, warnings: [], activity: 'waiting for detached worker' };
+  /** @type {import('./contracts.js').Job} */ const job = { version: VERSION, id, workspace: layout.workspace, lockKey: layout.lockKey, status: 'starting', createdAt: now, updatedAt: now, ...(sessionId ? { sessionId } : {}), sessionDir: actualSessionDir, ...(parentJobId ? { parentJobId } : {}), executable: executableInfo.executable, modelRequested: model.model, ompVersion: executableInfo.version, ...(model.thinking ? { thinking: model.thinking } : {}), workerNonce: nonce, warnings: [...executableInfo.versionWarnings], activity: 'waiting for detached worker' };
   let lockAcquired = false;
   try {
     await mkdir(temporaryDir, { mode: MODE_DIR }); await chmod(temporaryDir, MODE_DIR); await secureDirectory(temporarySessionDir); await initializeJobFiles(temporaryDir); await writeJsonAtomic(pathForJob(temporaryDir, 'brief.json'), parsedBrief.data); await writeJsonAtomic(pathForJob(temporaryDir, BASELINE_FILE), baseline); await writeJsonAtomic(pathForJob(temporaryDir, 'job.json'), job);
@@ -505,7 +507,7 @@ async function createFollowupJob(workspace, brief, parent) {
   const id = crypto.randomUUID(); const nonce = crypto.randomUUID(); const jobDir = path.join(layout.jobsRoot, id); const temporaryDir = path.join(layout.jobsRoot, '.job-' + id + '.tmp'); let spawnedWorker = false; let published = false; let lockAcquired = false;
   try {
     await mkdir(temporaryDir, { mode: MODE_DIR }); await chmod(temporaryDir, MODE_DIR); await initializeJobFiles(temporaryDir); const baseline = await snapshotWorkspace(layout.workspace); const now = new Date().toISOString();
-    /** @type {import('./contracts.js').Job} */ const job = { version: VERSION, id, workspace: layout.workspace, lockKey: layout.lockKey, status: 'starting', createdAt: now, updatedAt: now, sessionId: parent.sessionId, sessionDir: parent.sessionDir, sessionFile: parent.sessionFile, ompVersion: SUPPORTED_OMP_VERSION, executable: executableInfo.executable, modelRequested: model.model, ...(model.thinking ? { thinking: model.thinking } : {}), parentJobId: parent.id, workerNonce: nonce, warnings: [], activity: 'waiting for detached worker' };
+    /** @type {import('./contracts.js').Job} */ const job = { version: VERSION, id, workspace: layout.workspace, lockKey: layout.lockKey, status: 'starting', createdAt: now, updatedAt: now, sessionId: parent.sessionId, sessionDir: parent.sessionDir, sessionFile: parent.sessionFile, ompVersion: executableInfo.version, executable: executableInfo.executable, modelRequested: model.model, ...(model.thinking ? { thinking: model.thinking } : {}), parentJobId: parent.id, workerNonce: nonce, warnings: [...executableInfo.versionWarnings], activity: 'waiting for detached worker' };
     await writeJsonAtomic(pathForJob(temporaryDir, 'brief.json'), brief); await writeJsonAtomic(pathForJob(temporaryDir, BASELINE_FILE), baseline); await writeJsonAtomic(pathForJob(temporaryDir, 'job.json'), job); await acquireLock(layout.workspace, nonce, id, layout.lockKey); lockAcquired = true; await rename(temporaryDir, jobDir); published = true;
     const child = await spawnWorker(jobDir, layout.workspace); spawnedWorker = true; return await waitReady(jobDir, nonce, child);
   } catch (error) {
@@ -655,7 +657,7 @@ export async function doctor(options) {
   const layout = await makeLayout(options.workspace); const executableInfo = await discoverExecutable(layout.workspace); let jobs = await listJobs({ workspace: layout.workspace }); let recovered; let prepublication = await inspectPrepublished(layout);
   if (options.recover !== undefined) { if (!jobIdSchema.safeParse(options.recover).success) throw failure('INVALID_INPUT', 'recover must be a UUID'); const target = jobs.find((job) => job.id === options.recover); if (target) { if (TERMINAL.has(target.status)) { const terminalLock = await diagnoseTerminalLock(target, layout.stateRoot); if (!terminalLock) recovered = target; else if (!terminalLock.recoveryEligible) throw failure('RECOVERY_UNSAFE', 'Terminal job lock cannot be safely recovered'); else recovered = await recoverTerminalLock(target); } else recovered = await recoverJob(target); } else { const temporary = prepublication.find((item) => item.id === options.recover); if (!temporary) throw failure('NOT_FOUND', 'Job not found in workspace: ' + options.recover); recovered = await recoverPrepublished(layout, options.recover); } jobs = await listJobs({ workspace: layout.workspace }); prepublication = await inspectPrepublished(layout); }
   const diagnostics = []; for (const job of jobs) { if (!TERMINAL.has(job.status) || job.error?.code === 'CANCEL_UNCONFIRMED') diagnostics.push(await diagnoseJob(job, layout.stateRoot)); if (TERMINAL.has(job.status)) { const terminalLock = await diagnoseTerminalLock(job, layout.stateRoot); if (terminalLock) diagnostics.push(terminalLock); } }
-  const active = jobs.filter((job) => !TERMINAL.has(job.status)); return { version: VERSION, status: recovered?.status, job: recovered, workspace: layout.workspace, lockKey: layout.lockKey, stateRoot: layout.stateRoot, configPath: executableInfo.configPath, executable: executableInfo.executable, ompVersion: executableInfo.version, active: active.map((job) => ({ id: job.id, status: job.status, ownerPid: job.ownerPid, childPgid: job.childPgid, heartbeatAt: job.heartbeatAt })), diagnostics, prepublication, jobs: jobs.length, ...(recovered ? { recovered } : {}), warnings: ['State is shared independently of Claude profile configuration; doctor never logs in, updates OMP, or kills an uncertain process.'] };
+  const active = jobs.filter((job) => !TERMINAL.has(job.status)); return { version: VERSION, status: recovered?.status, job: recovered, workspace: layout.workspace, lockKey: layout.lockKey, stateRoot: layout.stateRoot, configPath: executableInfo.configPath, executable: executableInfo.executable, ompVersion: executableInfo.version, ompVersionStatus: executableInfo.versionStatus, active: active.map((job) => ({ id: job.id, status: job.status, ownerPid: job.ownerPid, childPgid: job.childPgid, heartbeatAt: job.heartbeatAt })), diagnostics, prepublication, jobs: jobs.length, ...(recovered ? { recovered } : {}), warnings: [...executableInfo.versionWarnings, 'State is shared independently of Claude profile configuration; doctor never logs in, updates OMP, or kills an uncertain process.'] };
 }
 /** @param {string} jobDir @returns {Promise<import('./contracts.js').Job>} */
 export async function loadWorkerJob(jobDir) { const job = await readJobFromDir(jobDir); const layout = await layoutForWorkspace(job.workspace); await validateJobIdentity(job, layout, jobDir); return job; }
@@ -694,7 +696,7 @@ export async function terminalizeWorkerFailure(jobDir, nonce, error) {
 }
 /** @param {string} jobDir @param {string} nonce @param {Record<string,unknown>} result */
 export async function commitWorkerResult(jobDir, nonce, result) {
-  return await withMutationLock(jobDir, async () => { const current = await readValidatedJob(jobDir); if (current.workerNonce !== nonce) throw failure('RECOVERY_UNSAFE', 'Worker nonce changed before terminal commit'); if (TERMINAL.has(current.status)) return current; const cancelled = await readCancel(jobDir, nonce); const resultStatus = result.status; const unconfirmed = result.terminationConfirmed === false; const status = unconfirmed ? 'failed' : (cancelled || resultStatus === 'cancelled' ? 'cancelled' : resultStatus === 'completed' ? 'completed' : 'failed'); const error = result.error && typeof result.error === 'object' ? result.error : undefined; /** @type {import('./contracts.js').Job} */ const terminal = jobSchema.parse({ ...current, status, updatedAt: new Date().toISOString(), ownerPid: unconfirmed ? current.ownerPid : undefined, childPgid: unconfirmed ? current.childPgid : undefined, heartbeatAt: new Date().toISOString(), ...(result.sessionId ? { sessionId: result.sessionId } : {}), ...(result.sessionFile ? { sessionFile: result.sessionFile } : {}), ompVersion: SUPPORTED_OMP_VERSION, ...(result.modelActual ? { modelActual: result.modelActual } : {}), ...(error ? { error: /** @type {any} */ (error) } : {}), result, warnings: [...current.warnings, ...(Array.isArray(result.warnings) ? result.warnings.map(String) : []), ...(unconfirmed ? ['Process termination was not confirmed; workspace lock retained.'] : [])], activity: status === 'completed' ? 'OMP completed; review result evidence' : status }); await writeJsonAtomic(pathForJob(jobDir, 'job.json'), terminal); if (!unconfirmed) await releaseTerminalLock(jobDir, terminal); return terminal; });
+  return await withMutationLock(jobDir, async () => { const current = await readValidatedJob(jobDir); if (current.workerNonce !== nonce) throw failure('RECOVERY_UNSAFE', 'Worker nonce changed before terminal commit'); if (TERMINAL.has(current.status)) return current; const cancelled = await readCancel(jobDir, nonce); const resultStatus = result.status; const unconfirmed = result.terminationConfirmed === false; const status = unconfirmed ? 'failed' : (cancelled || resultStatus === 'cancelled' ? 'cancelled' : resultStatus === 'completed' ? 'completed' : 'failed'); const error = result.error && typeof result.error === 'object' ? result.error : undefined; /** @type {import('./contracts.js').Job} */ const terminal = jobSchema.parse({ ...current, status, updatedAt: new Date().toISOString(), ownerPid: unconfirmed ? current.ownerPid : undefined, childPgid: unconfirmed ? current.childPgid : undefined, heartbeatAt: new Date().toISOString(), ...(result.sessionId ? { sessionId: result.sessionId } : {}), ...(result.sessionFile ? { sessionFile: result.sessionFile } : {}), ...(current.ompVersion ? { ompVersion: current.ompVersion } : {}), ...(result.modelActual ? { modelActual: result.modelActual } : {}), ...(error ? { error: /** @type {any} */ (error) } : {}), result, warnings: [...current.warnings, ...(Array.isArray(result.warnings) ? result.warnings.map(String) : []), ...(unconfirmed ? ['Process termination was not confirmed; workspace lock retained.'] : [])], activity: status === 'completed' ? 'OMP completed; review result evidence' : status }); await writeJsonAtomic(pathForJob(jobDir, 'job.json'), terminal); if (!unconfirmed) await releaseTerminalLock(jobDir, terminal); return terminal; });
 }
 /** @param {string} jobDir @param {string} nonce @param {unknown[]} events */
 export async function appendWorkerEvents(jobDir, nonce, events) {

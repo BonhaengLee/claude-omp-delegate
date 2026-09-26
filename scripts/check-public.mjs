@@ -30,7 +30,7 @@ const REQUIRED_FILES = [
   'plugins/omp/.mcp.json',
 ];
 const REQUIRED_DIRECTORIES = ['src', 'scripts', 'tests', 'plugins/omp/commands', 'plugins/omp/hooks', 'plugins/omp/scripts', 'docs/public', 'licenses'];
-const CANDIDATE_FILES = [...REQUIRED_FILES, '.github/workflows/ci.yml'];
+const CANDIDATE_FILES = [...REQUIRED_FILES, '.github/workflows/ci.yml', '.github/workflows/omp-compat.yml'];
 const CANDIDATE_DIRECTORIES = ['src', 'scripts', 'tests', 'plugins/omp/commands', 'plugins/omp/hooks', 'plugins/omp/scripts', 'docs/public', 'licenses'];
 const PRIVATE_SEGMENTS = new Set(['ver' + 'ify', 'state', 'states', 'session', 'sessions', 'credential', 'credentials', 'secret', 'secrets', 'transcript', 'transcripts']);
 const GENERATED_SEGMENTS = new Set(['node_modules', 'runtime', 'dist']);
@@ -153,6 +153,8 @@ export async function checkPublicAt(root = ROOT) {
   const lock = JSON.parse(await readFile(path.join(root, 'package-lock.json'), 'utf8'));
   if (lock.name !== packageJson.name || lock.version !== packageJson.version || lock.packages?.['']?.name !== packageJson.name || lock.packages?.['']?.version !== packageJson.version) fail('package-lock metadata does not match package.json');
   for (const relative of REQUIRED_FILES) await regularFile(path.join(root, relative), relative);
+  const pluginManifest = JSON.parse(await readFile(path.join(root, 'plugins', 'omp', '.claude-plugin', 'plugin.json'), 'utf8'));
+  if (pluginManifest.version !== packageJson.version) fail('plugins/omp/.claude-plugin/plugin.json version must equal package.json version');
   for (const relative of REQUIRED_DIRECTORIES) {
     const info = await fileInfo(path.join(root, relative));
     if (!info?.isDirectory() || info.isSymbolicLink()) fail(relative + ' must be a real directory');

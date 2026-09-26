@@ -3,7 +3,7 @@
 This project has two different verification surfaces:
 
 1. **Deterministic repository/package checks** run against source, fixtures, and the generated runtime.
-2. **Manual host verification** run through an installed Claude Code plugin and OMP 18.3.0 on macOS/Linux.
+2. **Manual host verification** run through an installed Claude Code plugin and a tested OMP version on macOS/Linux; `npm run e2e:host` automates the core start → wait → result path.
 
 A fixture or package check cannot prove interactive Claude behavior. A successful process exit cannot prove acceptance. Keep the records separate and never report an unobserved behavior as PASS.
 
@@ -34,7 +34,7 @@ Repository tests should cover behavior and boundaries rather than wiring:
 - Plan-mode hook decisions and workspace realpath matching;
 - generated runtime manifest/package parity and public-document path/link checks.
 
-Fake child processes are useful for deterministic races and protocol errors. They are not a substitute for the actual OMP 18.3.0 stream or Claude host.
+Fake child processes are useful for deterministic races and protocol errors. They are not a substitute for the actual OMP stream or Claude host.
 
 ## Manual Claude/OMP host matrix
 
@@ -101,3 +101,16 @@ These observations are scoped to macOS arm64, Node.js 24.13.0, Claude Code 2.1.2
 An early implementation wrote job state once per streaming event. A real run showed a 734.256-second gap between the native final response and delegate terminal state. The final implementation uses bounded event batches, backpressure, and coalesced progress; timer-triggered writes cannot form another unbounded queue. The final installed-plugin follow-up changed one authorized module, executed 19 Node assertions with exit status 0, preserved the protected-file hashes and sealed ancestor artifacts, and produced a 7,454-character report. Native final-response timestamp to delegate terminal state was **1.180 seconds**; the actual Claude background notification arrived at **1.431 seconds**. This is one measured host run, not a latency guarantee.
 
 The seven verified runtime source files have aggregate SHA-256 `6df4ee6387979fd68660423f78325e3b441e252ff1fb68147f0062e791462c89` (SHA-256 of the ordered JSON map of filename to file SHA-256 for cli, contracts, jobs, render, runner, server, and worker). Production dependency audit at this verification point reported zero vulnerabilities.
+
+## Recorded checks for 0.1.1 (2026-09-26)
+
+Scope: macOS arm64, Node.js 24.13.0, Claude Code 2.1.283. Each run used the packaged runtime, a real OMP executable, an isolated `OMP_DELEGATE_STATE_DIR`, and a throwaway git workspace. The OMP 18.3.2 binary was the official `omp-darwin-arm64` release asset, verified against its published `SHA256SUMS.txt`.
+
+| OMP | doctor | start → wait → result | independent `node add.test.mjs` | changed files | `job.json` ompVersion |
+| --- | --- | --- | --- | --- | --- |
+| 18.3.0 | ok, tested | completed, `openai-codex/gpt-6-astra` | exit 0 | `add.js`, `add.test.mjs` only | 18.3.0 |
+| 18.3.2 | ok (run before it was added to the tested list, so it reported the untested warning) | completed, `openai-codex/gpt-6-astra` | exit 0 | `add.js`, `add.test.mjs` only | 18.3.2 |
+
+The 18.3.1 and 18.3.2 upstream changelogs list no change to the command-line flags or JSON event stream this plugin consumes (`--mode`, `--json`, `--resume`, `--session-dir`, `--model`, `--thinking`); the only listed breaking change is a TUI editor API. Unknown JSON event types remain tolerated by the reducer.
+
+Release-archive privacy: tar headers are written with an empty owner, uid/gid 0, and no extended attributes; the plugin zip is written with `zip -X`. `release:archive` parses the produced headers and fails if a builder account, uid/gid, or xattr remains. The 0.1.0 archive predates this check; its headers recorded the build machine's local account name.

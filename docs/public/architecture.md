@@ -1,6 +1,6 @@
 # Architecture
 
-`claude-omp-delegate` is a local integration between Claude Code and an already installed OMP 18.3.0 executable. The architecture keeps planning/review in Claude and implementation execution in OMP, with a durable job boundary between them.
+`claude-omp-delegate` is a local integration between Claude Code and an already installed OMP executable inside the supported range (`OMP_COMPAT` in `src/contracts.js`: 18.3.0 up to, not including, 19.0.0). The architecture keeps planning/review in Claude and implementation execution in OMP, with a durable job boundary between them.
 
 ## Responsibilities
 
@@ -29,7 +29,7 @@ plugins/omp/   -- Claude commands, MCP manifest, Plan-mode guard, generated runt
 - `src/server.js` registers six MCP tools and delegates to `src/jobs.js`; it does not own durable work. When `OMP_DELEGATE_DEPTH=1`, it exposes an empty tool catalog to prevent recursion.
 - `src/jobs.js` creates and validates state, resolves the OMP executable/model, enforces one active lock per workspace key, starts a detached worker, selects resumable sessions, and performs fail-closed recovery.
 - `src/worker.js` is the durable owner after readiness. It updates heartbeat/activity, polls cancellation intent, forwards OMP events/evidence, captures before/after workspace state, and commits terminal state.
-- `src/runner.js` starts OMP with an argv array and stdin prompt, reduces the OMP 18.3.0 JSONL dialect, validates the persisted session identity, and confirms process-group termination.
+- `src/runner.js` starts OMP with an argv array and stdin prompt, reduces the OMP 18.3.x JSONL dialect, validates the persisted session identity, and confirms process-group termination.
 - `src/render.js` is the shared user-facing envelope for MCP and CLI output. It intentionally distinguishes observed evidence from acceptance decisions.
 - `plugins/omp/commands/` contains the six slash-command interaction contracts. The generated `plugins/omp/runtime/` contains the source entrypoints, production dependencies, and upstream license texts required for an installed plugin.
 

@@ -3,7 +3,7 @@
 import { existsSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { LIMITS, TERMINAL } from './contracts.js';
+import { LIMITS, OMP_ALLOW_UNSUPPORTED_ENV, OMP_COMPAT, OMP_INSTALL_HINTS, TERMINAL } from './contracts.js';
 import { jobDetails as defaultJobDetails } from './jobs.js';
 
 /** @typedef {import('./contracts.js').Job} Job */
@@ -283,7 +283,7 @@ export function renderDoctor(report) {
   else nextActions.push('작업이 없으면 /omp:implement <요구>로 시작하세요.');
   const summary = [
     group('변경', ['doctor는 첫 실행 시 공용 config.json과 상태 디렉터리를 초기화할 수 있습니다. 로그인·업데이트·자동 계정 전환은 수행하지 않습니다.']),
-    group('검증', ['플랫폼: ' + asText(platform.name) + (platform.supported ? ' (지원)' : ' (미지원)'), 'OMP 실행 파일: ' + asText(report.executable), 'OMP 버전: ' + asText(report.ompVersion), 'plugin hook: hooks.json=' + asText(plugin.hooksPresent) + ', guard.cjs=' + asText(plugin.guardPresent)]),
+    group('검증', ['플랫폼: ' + asText(platform.name) + (platform.supported ? ' (지원)' : ' (미지원)'), 'OMP 실행 파일: ' + asText(report.executable), 'OMP 버전: ' + asText(report.ompVersion) + (report.ompVersionStatus === 'tested' ? ' (검증됨)' : report.ompVersionStatus === 'untested' ? ' (지원 범위 안 · 호스트 검증 기록 없음)' : report.ompVersionStatus === 'unsupported' ? ' (지원 범위 밖 · 강제 실행)' : ''), 'plugin hook: hooks.json=' + asText(plugin.hooksPresent) + ', guard.cjs=' + asText(plugin.guardPresent)]),
     group('주의', warnings),
     group('다음 행동', nextActions),
   ].join('\n\n');
@@ -296,9 +296,12 @@ export function renderError(error) {
   const code = typeof value?.code === 'string' ? value.code : 'PROCESS_FAILED';
   const message = value?.message ? String(value.message) : String(error);
   const safeMessage = code === 'WORKSPACE_BUSY' ? 'Workspace가 사용 중이며 현재 작업 카드를 불러오지 못했습니다.' : message;
+  const nextActions = code === 'OMP_NOT_FOUND' || code === 'VERSION_UNSUPPORTED'
+    ? [...OMP_INSTALL_HINTS, '지원 범위: OMP ' + OMP_COMPAT.min + ' 이상 ' + OMP_COMPAT.belowMajor + '.0.0 미만. 설치 뒤 /omp:doctor를 다시 실행하세요.', ...(code === 'VERSION_UNSUPPORTED' ? ['범위 밖 버전을 알고도 쓰려면 ' + OMP_ALLOW_UNSUPPORTED_ENV + '=1 로 Claude를 시작하세요(경고와 함께 실행).'] : [])]
+    : ['/omp:status 또는 /omp:doctor로 상태를 확인하세요.'];
   const warnings = ['요청을 완료하지 못했습니다. 상태/로그를 확인하세요.'];
   const data = { code, ...(code === 'WORKSPACE_BUSY' ? {} : (value?.details !== undefined ? { details: value.details } : {})) };
-  return envelope({ status: 'failed', summary: group('변경', ['오류 응답만으로 변경 여부를 단정할 수 없습니다. 현재 작업 상태를 확인하세요.']) + '\n\n' + group('검증', ['오류 코드: ' + code]) + '\n\n' + group('주의', [safeMessage]) + '\n\n' + group('다음 행동', ['/omp:status 또는 /omp:doctor로 상태를 확인하세요.']), nextActions: ['/omp:status 또는 /omp:doctor로 상태를 확인하세요.'], warnings, data });
+  return envelope({ status: 'failed', summary: group('변경', ['오류 응답만으로 변경 여부를 단정할 수 없습니다. 현재 작업 상태를 확인하세요.']) + '\n\n' + group('검증', ['오류 코드: ' + code]) + '\n\n' + group('주의', [safeMessage]) + '\n\n' + group('다음 행동', nextActions), nextActions, warnings, data });
 }
 
 /** @param {Envelope} value */
